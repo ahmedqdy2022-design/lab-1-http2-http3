@@ -1,0 +1,8 @@
+# Caddy binary and local data
+caddy.exe
+
+# Generated page and test images (personal photos)
+site/
+
+# Clumsy
+clumsy*/

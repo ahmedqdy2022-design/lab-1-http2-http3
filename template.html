@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Benchmark</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--ink:#1c2230;--mute:#6b7385;--line:#e4e7ec;--h3:#0f9d58;--h2:#e8710a;--acc:#2f5bea}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Segoe UI,Tahoma,sans-serif}
+header{background:#fff;border-bottom:1px solid var(--line);padding:14px 28px;display:flex;align-items:center;justify-content:space-between}
+header h1{font-size:18px;margin:0}
+header small{color:var(--mute);display:block;font-weight:400;font-size:12px;margin-top:2px}
+.badge{padding:6px 16px;border-radius:999px;color:#fff;font-weight:700;letter-spacing:1px;direction:ltr;background:#999}
+.badge.h3{background:var(--h3)}.badge.h2{background:var(--h2)}
+main{max-width:1100px;margin:0 auto;padding:24px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.card span{color:var(--mute);font-size:13px}
+.card b{display:block;font-size:28px;margin-top:6px;direction:ltr;text-align:right}
+.card b i{font-size:14px;font-style:normal;color:var(--mute);margin-inline-start:4px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:20px}
+.panel h2{font-size:15px;margin:0 0 12px}
+.bar{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+button{border:1px solid var(--line);background:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font:inherit}
+button.p{background:var(--acc);color:#fff;border-color:var(--acc)}
+table{width:100%;border-collapse:collapse;font-size:14px;direction:ltr}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:center}
+th{color:var(--mute);font-weight:600}
+tfoot td{font-weight:700;background:#f0f3ff}
+.gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.gal img{width:100%;height:150px;object-fit:cover;border-radius:8px;display:block}
+</style>
+</head>
+<body>
+<header>
+  <h1>مقارنة HTTP/2 و HTTP/3<small>مختبر الأنظمة الموزعة - المعمل 1</small></h1>
+  <div id="badge" class="badge">...</div>
+</header>
+<main>
+  <section class="cards">
+    <div class="card"><span>TTFB</span><b id="ttfb">-<i>ms</i></b></div>
+    <div class="card"><span>Load time</span><b id="load">-<i>ms</i></b></div>
+    <div class="card"><span>عدد الطلبات</span><b id="reqs">-</b></div>
+    <div class="card"><span>حجم النقل</span><b id="size">-<i>KB</i></b></div>
+  </section>
+
+  <section class="panel">
+    <h2>سجل التشغيلات (محفوظ لهذا المنفذ فقط)</h2>
+    <div class="bar">
+      <button class="p" onclick="location.reload()">إعادة التشغيل</button>
+      <button class="p" onclick="autoRun()">تشغيل تلقائي (6 مرات)</button>
+      <button onclick="exportCsv()">تصدير CSV</button>
+      <button onclick="clearRuns()">مسح السجل</button>
+    </div>
+    <table>
+      <thead><tr><th>#</th><th>Protocol</th><th>TTFB (ms)</th><th>Load (ms)</th></tr></thead>
+      <tbody id="rows"></tbody>
+      <tfoot><tr><td colspan="2">Average</td><td id="aT">-</td><td id="aL">-</td></tr></tfoot>
+    </table>
+  </section>
+
+  <section class="panel">
+    <h2>معرض الصور</h2>
+    <div class="gal" id="gal"></div>
+  </section>
+</main>
+
+<script>
+const FILES = /*FILES*/[];
+const gal = document.getElementById('gal');
+gal.innerHTML = FILES.map(f => '<img src="img/' + f + '">').join('');
+const KEY = 'runs';
+const get = () => { try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) { return []; } };
+const put = r => { try { localStorage.setItem(KEY, JSON.stringify(r)); } catch (e) {} };
+
+function render() {
+  const runs = get();
+  document.getElementById('rows').innerHTML = runs.map((r, i) =>
+    '<tr><td>' + (i + 1) + '</td><td>' + r.p + '</td><td>' + r.t + '</td><td>' + r.l + '</td></tr>').join('');
+  const avg = k => runs.length ? (runs.reduce((s, r) => s + +r[k], 0) / runs.length).toFixed(1) : '-';
+  document.getElementById('aT').textContent = avg('t');
+  document.getElementById('aL').textContent = avg('l');
+}
+function clearRuns() { put([]); render(); }
+function exportCsv() {
+  const csv = 'run,protocol,ttfb_ms,load_ms\n' + get().map((r, i) => [i + 1, r.p, r.t, r.l].join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = 'results-' + location.port + '.csv';
+  a.click();
+}
+
+window.addEventListener('load', () => setTimeout(() => {
+  const n = performance.getEntriesByType('navigation')[0];
+  const res = performance.getEntriesByType('resource');
+  const p = (n.nextHopProtocol || '?').toUpperCase();
+  const t = (n.responseStart - n.startTime).toFixed(1);
+  const l = (n.loadEventEnd - n.startTime).toFixed(1);
+  const bytes = res.reduce((s, r) => s + r.transferSize, n.transferSize);
+  const b = document.getElementById('badge');
+  b.textContent = p; b.className = 'badge ' + p.toLowerCase();
+  document.getElementById('ttfb').innerHTML = t + '<i>ms</i>';
+  document.getElementById('load').innerHTML = l + '<i>ms</i>';
+  document.getElementById('reqs').textContent = res.length + 1;
+  document.getElementById('size').innerHTML = (bytes / 1024).toFixed(1) + '<i>KB</i>';
+  document.title = p + ' - ' + l + 'ms';
+  const runs = get(); runs.push({ p, t, l }); put(runs); render();
+  const left = +(sessionStorage.getItem('auto') || 0);
+  if (left > 0) { sessionStorage.setItem('auto', left - 1); setTimeout(() => location.reload(), 600); }
+}, 150));
+function autoRun() { put([]); sessionStorage.setItem('auto', 6); location.reload(); }
+render();
+</script>
+</body>
+</html>

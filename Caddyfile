@@ -1,0 +1,19 @@
+{
+	local_certs
+	servers :8443 {
+		protocols h1 h2 h3
+	}
+	servers :9443 {
+		protocols h1 h2
+	}
+}
+
+localhost:8443 {
+	root * site
+	file_server
+}
+
+localhost:9443 {
+	root * site
+	file_server
+}
